@@ -1,0 +1,113 @@
+#new model code started
+#new model simulation trial
+
+import numpy as np
+import matplotlib.pyplot as plt
+num_sims = 1  # four associated runs
+
+t_init = 3
+t_end  = 7
+N      = 1000  # Compute 1000 grid points
+dt     = float(t_end - t_init) / N
+x1_init= 0
+x2_init= 0
+v1_init= 0
+v2_init= 0
+Ws_init= 0
+v1sq_init=0
+v2sq_init=0
+Qs_init=0
+
+T1=1
+T2=2
+        
+c_theta = 0.7
+c_mu    = 1.5
+c_sigma = 0.06
+g       = 1
+        
+def mu1(x1, x2, t):
+ #   """Implement the Ornstein–Uhlenbeck mu."""  # = \theta (\mu-Y_t)
+    return c_theta * (g*x2 - x1)
+def mu2(x1, x2, t):
+ #   """Implement the Ornstein–Uhlenbeck mu."""  # = \theta (\mu-Y_t)
+    return c_theta * (g*x1 - x2)
+
+def sigma(y, t):
+ #   """Implement the Ornstein–Uhlenbeck sigma."""  # = \sigma
+    return c_sigma
+
+def dW1(delta_t):
+ #   """Sample a random number at each call."""
+    return ((2*T1*g)**(0.5))*np.random.normal(loc=0.0, scale=np.sqrt(delta_t))
+
+def dW2(delta_t):
+ #   """Sample a random number at each call."""
+    return ((2*T2*g)**(0.5))*np.random.normal(loc=0.0, scale=np.sqrt(delta_t))
+
+ts = np.arange(t_init, t_end + dt, dt)
+x1s = np.zeros(N + 1)
+x2s = np.zeros(N + 1)
+v1s = np.zeros(N + 1)
+v2s = np.zeros(N + 1)
+Ws  = np.zeros(N + 1)
+Qs  = np.zeros(N + 1)
+v1sq= np.zeros(N + 1)
+v2sq= np.zeros(N + 1)
+S_tot =np.zeros(N + 1)
+
+x1s[0] = x1_init
+x2s[0] = x2_init
+v1s[0] = v1_init
+v2s[0] = v2_init
+Ws[0]  = Ws_init
+Qs[0]  = Qs_init
+v1sq[0]= v1sq_init
+v2sq[0]= v2sq_init
+S_tot[0] = 0
+
+
+for _ in range(1):
+    for i in range(1, ts.size):
+        t = i * dt
+        x1 = x1s[i - 1]
+        x2 = x2s[i - 1]
+        v1 = v1s[i - 1]
+        v2 = v2s[i - 1]
+        S = S_tot[i - 1]
+                
+        v1s[i] = -v1 + mu1(x1,x2,t) * dt + sigma(v1, t) * dW1(dt)
+        v2s[i] = -v2 + mu2(x1,x2,t) * dt + sigma(v2, t) * dW2(dt)
+        x1s[i] = x1 + v1s[i] * dt
+        x2s[i] = x2 + v2s[i] * dt
+        Ws[i]  = Ws[i] - ( v1s[i]*x2s[i] + v2s[i] * x1s[i] )*dt
+        v1sq[i]= v1s[i] * v1s[i] 
+        v2sq[i]= v2s[i] * v2s[i]
+        v1sqev = sum(v1sq) / t
+        Qs[i] = (T1/2 - v1sqev/2) * t
+        
+        S_tot[i] = S + ((1-T2/T1)/T1)*Qs[i] - (Ws[i]/T2) -((v1sq[i] + v2sq[i] + x1s[i]**2 + x2s[i]**2 ) /T2 )
+        
+        
+#    plt.plot(ts, x1s)
+#    plt.plot(ts, Ws)
+    plt.plot(ts, S_tot)
+    
+
+#def del_shannon_etpy(trj, T1, T2):
+    
+    
+#def del_medium_etpy(trj, T1, T2):
+
+    
+#def analytic_etpy(num_beads, T1, T2):
+#    Q = (T1/2 - v1sqev/2)*t
+#    S_tot = ((1-T2/T1)/T1)*Q - (Ws/T2) + (S_sys - /T2 )
+    
+
+    
+    
+plt.xlabel("time (s)")
+h = plt.ylabel("x1")
+h.set_rotation(0)
+plt.show() 
