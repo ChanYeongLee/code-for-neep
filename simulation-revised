@@ -1,0 +1,361 @@
+import torch
+import numpy as np
+import random
+from torch.distributions.multivariate_normal import MultivariateNormal
+
+# Spring and Stokes friction coefficient
+k, e = 2, 1
+dt = 0.01
+
+
+
+
+
+def sampling(num_beads, T1, T2, num_trjs):
+    """Sampling the states of beads in steady state.
+    
+    Args:
+        num_beads : Number of beads. Here, we allow only 2 and 5.
+        T1 : Leftmost temperature
+        T2 : Rightmost temperature
+        num_trjs : Number of trajectories you want. default = 1000.
+
+    Returns:
+        Sampled states from the probability density in steady state. 
+    """
+    assert (num_beads == 4) or (num_beads == 5), "'num_beads' must be 4 or 5"
+
+    if num_beads == 4:
+        k, e = 1.0, 1.0
+        T1 = 1.0
+        T2 = 2.0
+        K = 1.0
+        ga =0.01
+        det = 0.375
+        ep = 0.5
+        m = 1.0
+
+        psi= (det * T1 + ep * T2)/(2*K*K - ep * det)
+        phi= (det * T1 - ep * T2)/(2*ga*ga*K + m*ep*det)
+        cov = [
+        [
+                (K*psi + ga*ga*phi)/det,  psi,   0.0,   ga*phi
+            ],
+            [
+                psi  ,(K*psi - ga*ga*phi)/ep,  -ga*phi,   0.0
+            ],
+            [
+                0.0  , -ga*phi ,T1/m - ep*phi,   0.0
+            ],
+            [
+                ga*phi  ,  0.0,   0.0, T1/m + ga*phi
+            ]
+        ]
+        N = MultivariateNormal(torch.zeros(4), torch.tensor(cov))
+        positions = N.sample((num_trjs,))        
+        
+
+    elif num_beads == 5:
+        cov = [
+            [
+                (1477 * T1 + 173 * T2) / (1980.0 * k),
+                (487 * T1 + 173 * T2) / (990.0 * k),
+                (619 * T1 + 371 * T2) / (1980.0 * k),
+                (361 * T1 + 299 * T2) / (1980.0 * k),
+                (T1 + T2) / (12.0 * k),
+            ],
+            [
+                (487 * T1 + 173 * T2) / (990.0 * k),
+                (2 * (15 * T1 + 7 * T2)) / (33.0 * k),
+                (1141 * T1 + 839 * T2) / (1980.0 * k),
+                (T1 + T2) / (3.0 * k),
+                (299 * T1 + 361 * T2) / (1980.0 * k),
+            ],
+            [
+                (619 * T1 + 371 * T2) / (1980.0 * k),
+                (1141 * T1 + 839 * T2) / (1980.0 * k),
+                (3 * (T1 + T2)) / (4.0 * k),
+                (839 * T1 + 1141 * T2) / (1980.0 * k),
+                (371 * T1 + 619 * T2) / (1980.0 * k),
+            ],
+            [
+                (361 * T1 + 299 * T2) / (1980.0 * k),
+                (T1 + T2) / (3.0 * k),
+                (839 * T1 + 1141 * T2) / (1980.0 * k),
+                (2 * (7 * T1 + 15 * T2)) / (33.0 * k),
+                (173 * T1 + 487 * T2) / (990.0 * k),
+            ],
+            [
+                (T1 + T2) / (12.0 * k),
+                (299 * T1 + 361 * T2) / (1980.0 * k),
+                (371 * T1 + 619 * T2) / (1980.0 * k),
+                (173 * T1 + 487 * T2) / (990.0 * k),
+                (173 * T1 + 1477 * T2) / (1980.0 * k),
+            ],
+        ]
+
+        N = MultivariateNormal(torch.zeros(5), torch.tensor(cov))
+        positions = N.sample((num_trjs,))
+
+    return positions
+
+
+def simulation(num_trjs, trj_len, num_beads, T1, T2, dt, device='cpu', seed=0):
+    """Simulation of a bead-spring 2d-lattice model
+    
+    Args:
+        num_beads : Number of beads for each row
+        T1 : LeftUp-most temperature
+        T2 : RighDown-tmost temperature
+        dt : time step 
+        trj_len : length of trajectories
+        seed : seed of random generator
+        num_trjs : Number of trajectories you want. default = 1000.
+
+    Returns:
+        trajectories of a bead-spring 2d-lattice model
+    """
+    T = torch.linspace(T1, T2, num_beads).to(device)
+    dt = torch.tensor(dt).to(device)
+    dt2 = torch.sqrt(dt).to(device)
+    
+    trj = torch.zeros(num_trjs, trj_len, 4).to(device)
+    Drift = torch.zeros(num_beads, num_beads).to(device)
+    
+    position = sampling(num_beads, T1, T2, num_trjs).to(device)
+    changeX = torch.zeros(num_trjs, trj_len, num_beads).to(device)
+    num_sims = trj_len  # four associated runs
+    
+    t_init = 3
+    t_end  = 13
+    N      = num_sims  # Compute 1000 grid points
+    x1_init=2.7525     #10
+    x2_init=3.5993     #0
+    v1_init=-2.1015     #10
+    v2_init=  -0.1234    #-10
+    Ws_init= 0
+    v1sq_init=0
+    v2sq_init=0
+    Qs_init=0
+
+        #T1=1
+        #T2=2
+
+
+    k, e = 1.0, 1.0
+    T1 = 1.0
+    T2 = 2.0
+    K = 1.0
+    ga =0.01
+    det = 0.375
+    ep = 0.5
+    m = 1.0  
+
+    c_theta = 1.0
+    c_mu    = 1.5
+    c_sigma = 0.6
+    g       = 0.01
+
+    def mu1(x1, x2, t):
+    #   """Implement the Ornstein–Uhlenbeck mu."""  # = \theta (\mu-Y_t)
+        return (-K*x1 + ep*x2)/m
+    def mu2(x1, x2, t):
+        #   """Implement the Ornstein–Uhlenbeck mu."""  # = \theta (\mu-Y_t)
+        return (-K*x2 + det*x1)/m
+
+    def sigma(y, t):
+         #   """Implement the Ornstein–Uhlenbeck sigma."""  # = \sigma
+        return c_sigma
+
+    def dW1(delta_t):
+         #   """Sample a random number at each call."""
+        return (((2*T1*g)**(0.5))*np.random.normal(loc=0.0, scale=np.sqrt(delta_t)))/m
+
+    def dW2(delta_t):
+         #   """Sample a random number at each call."""
+        return (((2*T2*g)**(0.5))*np.random.normal(loc=0.0, scale=np.sqrt(delta_t)))/m
+
+    ts = np.arange(t_init, t_end + dt, dt)
+    x1s = np.zeros(N + 1)
+    x2s = np.zeros(N + 1)
+    v1s = np.zeros(N + 1)
+    v2s = np.zeros(N + 1)
+    Ws  = np.zeros(N + 1)
+    Qs  = np.zeros(N + 1)
+    v1sq= np.zeros(N + 1)
+    v2sq= np.zeros(N + 1)
+    S_tot =np.zeros(N + 1)
+    x1f = np.zeros(N + 1)
+    x2f = np.zeros(N + 1)
+    v1f = np.zeros(N + 1)
+    v2f = np.zeros(N + 1)
+
+
+    x1s[0] = x1_init
+    x2s[0] = x2_init
+    v1s[0] = v1_init
+    v2s[0] = v2_init
+    Ws[0]  = Ws_init
+    Qs[0]  = Qs_init
+    v1sq[0]= v1sq_init
+    v2sq[0]= v2sq_init
+    S_tot[0] = 0
+    x1f[0] = x1_init
+    x2f[0] = x2_init
+    v1f[0] = v1_init
+    v2f[0] = v2_init
+     
+
+    rfc = torch.zeros(num_beads).to(device)
+    for i in range(num_beads):
+        rfc[i] = torch.sqrt(2 * e * T[i])
+
+    torch.manual_seed(seed)
+
+    for k in range(num_trjs):
+        
+        for it in range(trj_len):
+            RanForce = torch.randn(num_trjs, num_beads, device=device)
+            RanForce *= rfc
+
+            t = it * dt
+            x1 = x1s[it - 1]
+            x2 = x2s[it - 1]
+            v1 = v1s[it - 1]
+            v2 = v2s[it - 1]
+            S = S_tot[it - 1]
+
+            v1s[it] = v1-ga*v1 *dt + mu1(x1,x2,t) * dt + sigma(v1s, t) * dW1(dt)
+            v2s[it] = v2-ga*v2 *dt  + mu2(x1,x2,t) * dt + sigma(v2s, t) * dW2(dt)
+            x1s[it] = x1 + v1s[it] * dt
+            x2s[it] = x2 + v2s[it] * dt
+            Ws[it]  = Ws[it] - ( v1s[it]*x2s[it] + v2s[it] * x1s[it] )*dt
+
+            v1sq[i]= v1s[i] * v1s[i] 
+            v2sq[i]= v2s[i] * v2s[i]
+   #         v1sqev = sum(v1sq) / (t+it)
+            
+            
+            
+            position[k, 0] = x1s[it]
+            position[k, 1] = x2s[it]
+            position[k, 2] = v1s[it]
+            position[k, 3] = v2s[it]
+
+            
+
+            trj[k, it, :] = position[k,:]
+            
+            
+
+    return trj
+
+
+def del_shannon_etpy(trj, T1, T2):
+    """Shannon entropy (or system entropy) difference for trajectories.
+    
+    Args:
+        trj : Trajectories of multiple model for trj_len.
+            So, its shape must be (number of trajectory, trj_len, number of beads).
+        T1 : Leftmost temperature
+        T2 : Rightmost temperature
+
+    Returns:
+        Shannon entropy difference for each step of 'trj'. 
+        So, its shape is (number of trajectory, trj_len)
+    """
+    num_beads = trj.shape[-1]
+    assert (num_beads == 4) or (
+        num_beads == 5
+    ), "'number of beads' in 'trj' must be 2 or 5"
+
+    etpy_prev = -torch.log(p_ss(num_beads, trj[:, :-1, :], T1, T2))
+    etpy_next = -torch.log(p_ss(num_beads, trj[:, 1:, :], T1, T2))
+
+    
+    
+    return etpy_next - etpy_prev
+
+
+def del_medium_etpy(trj, T1, T2):
+    """Medium entropy (or system entropy) difference for trajectories.
+    
+    Args:
+        trj : Trajectories of multiple model for trj_len. 
+            So, its shape must be (number of trajectory, trj_len, number of beads).
+        T1 : Leftmost temperature
+        T2 : Rightmost temperature
+
+    Returns:
+        Medium entropy difference for each step of 'trj'. 
+        So, its shape is (number of trajectory, trj_len) or (number of trajectory, trj_len)
+    """
+    num_beads = trj.shape[-1]
+    assert (num_beads == 4) or (
+        num_beads == 5
+    ), "'number of beads' in 'trj' must be 2 or 5"
+    g=1
+    Drift = torch.zeros(num_beads, num_beads).to(trj.device)
+    T = torch.linspace(T1, T2, num_beads).to(trj.device)
+
+   
+    T1 = 1.0
+    T2 = 2.0
+    K = 1.0
+    ga =0.01
+    c_theta = 1.0
+    c_mu    = 1.5
+    c_sigma = 0.6
+    g       = 1.0
+    K=2.0
+    ga = 0.01
+    ep = 0.5
+    trjnum = trj.shape
+    
+    v_prev = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    v_next = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    
+    
+    dW1 = torch.zeros(trjnum[0],trjnum[1]-1)
+    dW2 = torch.zeros(trjnum[0],trjnum[1]-1)
+    dW3 = torch.zeros(trjnum[0],trjnum[1]-1)
+    dW4 = torch.zeros(trjnum[0],trjnum[1]-1)
+    
+#    v1s[it] = v1-ga*v1 *dt + mu1(x1,x2,t) * dt + sigma(v1s, t) * dW1(dt)
+#    v2s[it] = v2-ga*v2 *dt + mu2(x1,x2,t) * dt + sigma(v2s, t) * dW2(dt)
+
+
+    
+    v_prev[:,:,0] = trj[:, :-1,2]
+    v_prev[:,:,1] = trj[:, :-1,3]
+    v_next[:,:,0] = trj[:, 1:, 2]
+    v_next[:,:,1] = trj[:, 1:, 3]
+
+    k1 = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    k2 = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    
+#    dt = 0.001
+    
+    for k in range(trjnum[0]):
+        for j in range(2,trjnum[1]-1):
+            mu1 = -K* trj[k, j-1,0] + ep*trj[k,j-1,1]
+            mu2 = -K* trj[k, j-1,1] + ep*trj[k,j-1,0]
+            dW1[k,j] = (v_next[k,j,0]-v_prev[k,j,0]+ga*v_prev[k,j,0]*dt-mu1*dt)/c_sigma
+            dW2[k,j] = (v_next[k,j,1]-v_prev[k,j,1]+ga*v_prev[k,j,1]*dt-mu2*dt)/c_sigma
+            dW3[k,j] = (dW1[k,j]+dW1[k,j-1])*0.5*dt
+            dW4[k,j] = (dW2[k,j]+dW2[k,j-1])*0.5*dt
+            
+            k1[k,j,0] = ((v_next[k,j,0] + v_prev[k,j,0])/2)*(dW3[k,j]-dW3[k,j-1])*dt
+            k2[k,j,1] = ((v_next[k,j,1] + v_prev[k,j,1])/2)*(dW4[k,j]-dW4[k,j-1])*dt
+    
+    Fv1 =(v_prev)*(v_prev)*dt - k1
+    Fv2 =(v_prev)*(v_prev)*dt - k2
+    dQ = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    dQ[:,:,0] = (Fv1[:,:,0])/T1 
+    dQ[:,:,1] = (Fv2[:,:,1])/T2
+
+
+    etpy = torch.sum(dQ, dim=2)
+
+    return etpy
+
