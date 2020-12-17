@@ -1,0 +1,18 @@
+dt=0.01
+total_number = len(ety1)
+print(total_number)
+hist_normal = np.asarray(hist)/total_number
+n=150
+pss_val = np.zeros(n)
+expon = np.zeros(n)
+coe = bins[2]-bins[1] 
+for i in range(n):
+    pss_val[i] = hist[i+n]/hist[n-i]
+    expon[i] = np.exp(bins[i+n]*coe*dt) 
+    
+plt.plot(pss_val)
+plt.plot(expon)
+plt.xlabel('Entropy production')
+plt.ylabel('p(s)/p(-s)')
+#plt.axis([0, 20, 0 ,10])
+plt.show()
