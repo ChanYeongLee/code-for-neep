@@ -120,15 +120,18 @@ def simulation(num_trjs, trj_len, num_beads, T1, T2, dt, device='cpu', seed=0):
     dt2 = torch.sqrt(dt).to(device)
     
     trj = torch.zeros(num_trjs, trj_len, 4).to(device)
+    trj1 = torch.zeros(num_trjs, 10000, 4).to(device)
     Drift = torch.zeros(num_beads, num_beads).to(device)
     
     position = sampling(num_beads, T1, T2, num_trjs).to(device)
     changeX = torch.zeros(num_trjs, trj_len, num_beads).to(device)
     num_sims = trj_len  # four associated runs
+    position1 = torch.zeros(num_trjs, num_beads)
     
     t_init = 3
     t_end  = 13
     N      = num_sims  # Compute 1000 grid points
+#    dt     = 0.001
     x1_init=2.7525     #10
     x2_init=3.5993     #0
     v1_init=-2.1015     #10
@@ -180,75 +183,227 @@ def simulation(num_trjs, trj_len, num_beads, T1, T2, dt, device='cpu', seed=0):
     x2s = np.zeros(N + 1)
     v1s = np.zeros(N + 1)
     v2s = np.zeros(N + 1)
-    Ws  = np.zeros(N + 1)
-    Qs  = np.zeros(N + 1)
-    v1sq= np.zeros(N + 1)
-    v2sq= np.zeros(N + 1)
-    S_tot =np.zeros(N + 1)
-    x1f = np.zeros(N + 1)
-    x2f = np.zeros(N + 1)
-    v1f = np.zeros(N + 1)
-    v2f = np.zeros(N + 1)
 
+    px1s = np.zeros(10000)
+    px2s = np.zeros(10000)
+    pv1s = np.zeros(10000)
+    pv2s = np.zeros(10000)
+    
+    
 
     x1s[0] = x1_init
     x2s[0] = x2_init
     v1s[0] = v1_init
     v2s[0] = v2_init
-    Ws[0]  = Ws_init
-    Qs[0]  = Qs_init
-    v1sq[0]= v1sq_init
-    v2sq[0]= v2sq_init
-    S_tot[0] = 0
-    x1f[0] = x1_init
-    x2f[0] = x2_init
-    v1f[0] = v1_init
-    v2f[0] = v2_init
-     
 
     rfc = torch.zeros(num_beads).to(device)
     for i in range(num_beads):
         rfc[i] = torch.sqrt(2 * e * T[i])
 
     torch.manual_seed(seed)
+    
+    
+    for k1 in range(num_trjs):
+        
+        for it1 in range(10000):
+            RanForce = torch.randn(num_trjs, num_beads, device=device)
+            RanForce *= rfc
+            
+            px1s[0]=position[k1, 0]
+            px2s[0]=position[k1, 1]
+            pv1s[0]=position[k1, 2]
+            pv2s[0]=position[k1, 3]             
+            
+
+            
+            t = it1 * dt
+            x1 = px1s[it1 - 1]
+            x2 = px2s[it1 - 1]
+            v1 = pv1s[it1 - 1]
+            v2 = pv2s[it1 - 1]
+            
+            pmu1=(-K*x1 + ep*x2)/m
+            pmu2=(-K*x2 + det*x1)/m
+            
+            pv1s[it1] = v1-ga*v1 *dt + pmu1 * dt + sigma(v1s, t) * dW1(dt)
+            pv2s[it1] = v2-ga*v2 *dt  + pmu2 * dt + sigma(v2s, t) * dW2(dt)
+            px1s[it1] = x1 + pv1s[it1] * dt
+            px2s[it1] = x2 + pv2s[it1] * dt
+            
+            position1[k1, 0] = px1s[it1]
+            position1[k1, 1] = px2s[it1]
+            position1[k1, 2] = pv1s[it1]
+            position1[k1, 3] = pv2s[it1]
+
+            trj1[k1, it1, :] = position1[k1,:]    
+    
+
+
+
+
 
     for k in range(num_trjs):
         
         for it in range(trj_len):
             RanForce = torch.randn(num_trjs, num_beads, device=device)
             RanForce *= rfc
-
+    
+            x1s[0] = position1[k, 0]
+            x2s[0] = position1[k, 1]
+            v1s[0] = position1[k, 2]
+            v2s[0] = position1[k, 3]            
+            
             t = it * dt
             x1 = x1s[it - 1]
             x2 = x2s[it - 1]
             v1 = v1s[it - 1]
             v2 = v2s[it - 1]
-            S = S_tot[it - 1]
 
             v1s[it] = v1-ga*v1 *dt + mu1(x1,x2,t) * dt + sigma(v1s, t) * dW1(dt)
             v2s[it] = v2-ga*v2 *dt  + mu2(x1,x2,t) * dt + sigma(v2s, t) * dW2(dt)
             x1s[it] = x1 + v1s[it] * dt
             x2s[it] = x2 + v2s[it] * dt
-            Ws[it]  = Ws[it] - ( v1s[it]*x2s[it] + v2s[it] * x1s[it] )*dt
 
-            v1sq[i]= v1s[i] * v1s[i] 
-            v2sq[i]= v2s[i] * v2s[i]
-   #         v1sqev = sum(v1sq) / (t+it)
-            
-            
-            
             position[k, 0] = x1s[it]
             position[k, 1] = x2s[it]
             position[k, 2] = v1s[it]
             position[k, 3] = v2s[it]
-
-            
 
             trj[k, it, :] = position[k,:]
             
             
 
     return trj
+
+
+
+def p_ss(num_beads, x, T1, T2):
+    """Probability density function in steady state.
+    
+    Args:
+        num_beads : Number of beads. Here, we allow only 2 and 5.
+        x : states of beads for multiple models. 
+            So, its shape must be (number of trajectory, trj_len, number of beads)
+        T1 : Leftmost temperature
+        T2 : Rightmost temperature
+
+    Returns:
+        Probability at x.
+    """
+    assert (num_beads == 4) or (num_beads == 5), "'num_beads' must be 2 or 5"
+
+    if num_beads == 4:
+        x1, x2, v1, v2 = x[:, :, 0], x[:, :, 1], x[:, :, 2], x[:, :, 3]
+        return torch.exp(
+            -0.5
+            * (
+                (x2*(-0.978641*x1 + 1.38641*x2 - 0.231068*v1 - 0.24466*v2) 
+                 + v1*(0.163107*x1 - 0.231068*x2 + 0.871845*v1 + 0.0407767*v2) 
+                 + x1*(2.33786*x1 - 0.978641*x2 + 0.163107*v1 + 0.584466*v2) 
+                 + v2*(0.584466*x1 - 0.24466*x2 + 0.0407767*v1 + 1.39612*v2))
+            )
+        )
+
+    elif num_beads == 5:
+        x1, x2, x3, x4, x5 = x[:, :, 0], x[:, :, 1], x[:, :, 2], x[:, :, 3], x[:, :, 4]
+        return torch.exp(
+            -0.5
+            * (
+                (
+                    4
+                    * k
+                    * (
+                        12
+                        * T2
+                        * T1 ** 3
+                        * (
+                            568423 * x1 ** 2
+                            + 743354 * x2 ** 2
+                            + 1117575 * x3 ** 2
+                            - 1528831 * x3 * x4
+                            + 1837478 * x4 ** 2
+                            + 23794 * x3 * x5
+                            - 2009111 * x4 * x5
+                            + 2044727 * x5 ** 2
+                            - x1 * (612169 * x2 - 2306 * x3 + 6680 * x4 + 450 * x5)
+                            - x2 * (862049 * x3 + 32768 * x4 + 1000 * x5)
+                        )
+                        + 12
+                        * T2 ** 3
+                        * T1
+                        * (
+                            2044727 * x1 ** 2
+                            + 1837478 * x2 ** 2
+                            + 1117575 * x3 ** 2
+                            - 862049 * x3 * x4
+                            + 743354 * x4 ** 2
+                            + 2306 * x3 * x5
+                            - 612169 * x4 * x5
+                            + 568423 * x5 ** 2
+                            - x1 * (2009111 * x2 - 23794 * x3 + 1000 * x4 + 450 * x5)
+                            - x2 * (1528831 * x3 + 32768 * x4 + 6680 * x5)
+                        )
+                        + T2 ** 4
+                        * (
+                            5832179 * x1 ** 2
+                            + 1277280 * x2 ** 2
+                            + 374363 * x3 ** 2
+                            - 274278 * x3 * x4
+                            + 238824 * x4 ** 2
+                            + 1562 * x3 * x5
+                            - 194694 * x4 * x5
+                            + 180563 * x5 ** 2
+                            + x2 * (-376146 * x3 + 20448 * x4 + 4896 * x5)
+                            - 2
+                            * x1
+                            * (2171241 * x2 + 190403 * x3 + 46272 * x4 + 10537 * x5)
+                        )
+                        + T1 ** 4
+                        * (
+                            180563 * x1 ** 2
+                            + 238824 * x2 ** 2
+                            + 374363 * x3 ** 2
+                            - 376146 * x3 * x4
+                            + 1277280 * x4 ** 2
+                            - 380806 * x3 * x5
+                            - 4342482 * x4 * x5
+                            + 5832179 * x5 ** 2
+                            - 2 * x1 * (97347 * x2 - 781 * x3 - 2448 * x4 + 10537 * x5)
+                            - 6 * x2 * (45713 * x3 - 3408 * x4 + 15424 * x5)
+                        )
+                        + 2
+                        * T2 ** 2
+                        * T1 ** 2
+                        * (
+                            12677929 * x1 ** 2
+                            + 15120156 * x2 ** 2
+                            + 17577937 * x3 ** 2
+                            - 16692708 * x3 * x4
+                            + 15120156 * x4 ** 2
+                            + 33022 * x3 * x5
+                            - 13366932 * x4 * x5
+                            + 12677929 * x5 ** 2
+                            + x1
+                            * (-13366932 * x2 + 33022 * x3 + 89904 * x4 + 26474 * x5)
+                            + x2 * (-16692708 * x3 + 372768 * x4 + 89904 * x5)
+                        )
+                    )
+                )
+                / (
+                    3.0
+                    * (
+                        115491 * T2 ** 5
+                        + 4368823 * T2 ** 4 * T1
+                        + 16424486 * T2 ** 3 * T1 ** 2
+                        + 16424486 * T2 ** 2 * T1 ** 3
+                        + 4368823 * T2 * T1 ** 4
+                        + 115491 * T1 ** 5
+                    )
+                )
+            )
+        )
+
+    return -1
 
 
 def del_shannon_etpy(trj, T1, T2):
@@ -270,6 +425,7 @@ def del_shannon_etpy(trj, T1, T2):
     ), "'number of beads' in 'trj' must be 2 or 5"
 
     etpy_prev = -torch.log(p_ss(num_beads, trj[:, :-1, :], T1, T2))
+    
     etpy_next = -torch.log(p_ss(num_beads, trj[:, 1:, :], T1, T2))
 
     
@@ -310,10 +466,13 @@ def del_medium_etpy(trj, T1, T2):
     K=2.0
     ga = 0.01
     ep = 0.5
+    det =  0.375
     trjnum = trj.shape
     
     v_prev = torch.zeros(trjnum[0],trjnum[1]-1,2)
     v_next = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    x_prev = torch.zeros(trjnum[0],trjnum[1]-1,2)
+    x_next = torch.zeros(trjnum[0],trjnum[1]-1,2)
     
     
     dW1 = torch.zeros(trjnum[0],trjnum[1]-1)
@@ -331,6 +490,12 @@ def del_medium_etpy(trj, T1, T2):
     v_next[:,:,0] = trj[:, 1:, 2]
     v_next[:,:,1] = trj[:, 1:, 3]
 
+    x_prev[:,:,0] = trj[:, :-1,0]
+    x_prev[:,:,1] = trj[:, :-1,1]
+    x_next[:,:,0] = trj[:, 1:, 0]
+    x_next[:,:,1] = trj[:, 1:, 1]
+    
+
     k1 = torch.zeros(trjnum[0],trjnum[1]-1,2)
     k2 = torch.zeros(trjnum[0],trjnum[1]-1,2)
     
@@ -338,18 +503,14 @@ def del_medium_etpy(trj, T1, T2):
     
     for k in range(trjnum[0]):
         for j in range(2,trjnum[1]-1):
-            mu1 = -K* trj[k, j-1,0] + ep*trj[k,j-1,1]
-            mu2 = -K* trj[k, j-1,1] + ep*trj[k,j-1,0]
-            dW1[k,j] = (v_next[k,j,0]-v_prev[k,j,0]+ga*v_prev[k,j,0]*dt-mu1*dt)/c_sigma
-            dW2[k,j] = (v_next[k,j,1]-v_prev[k,j,1]+ga*v_prev[k,j,1]*dt-mu2*dt)/c_sigma
-            dW3[k,j] = (dW1[k,j]+dW1[k,j-1])*0.5*dt
-            dW4[k,j] = (dW2[k,j]+dW2[k,j-1])*0.5*dt
             
-            k1[k,j,0] = ((v_next[k,j,0] + v_prev[k,j,0])/2)*(dW3[k,j]-dW3[k,j-1])*dt
-            k2[k,j,1] = ((v_next[k,j,1] + v_prev[k,j,1])/2)*(dW4[k,j]-dW4[k,j-1])*dt
-    
-    Fv1 =(v_prev)*(v_prev)*dt - k1
-    Fv2 =(v_prev)*(v_prev)*dt - k2
+            k1[k,j,0] = ((v_next[k,j,0])**2 - (v_prev[k,j,0])**2)*0.5 +K*((x_next[k,j,0])**2 - (x_prev[k,j,0])**2)*0.5 - ep*(x_next[k,j,1]+x_prev[k,j,1])*(x_next[k,j,0]-x_prev[k,j,0])*0.5
+            k2[k,j,1] = ((v_next[k,j,1])**2 - (v_prev[k,j,1])**2)*0.5 +K*((x_next[k,j,1])**2 - (x_prev[k,j,1])**2)*0.5 - det*(x_next[k,j,0]+x_prev[k,j,0])*(x_next[k,j,1]-x_prev[k,j,1])*0.5
+            
+            
+            
+    Fv1 =- k1
+    Fv2 =- k2
     dQ = torch.zeros(trjnum[0],trjnum[1]-1,2)
     dQ[:,:,0] = (Fv1[:,:,0])/T1 
     dQ[:,:,1] = (Fv2[:,:,1])/T2
@@ -358,4 +519,30 @@ def del_medium_etpy(trj, T1, T2):
     etpy = torch.sum(dQ, dim=2)
 
     return etpy
+
+
+
+def analytic_etpy(num_beads, T1, T2):
+    """Analytic entropy production rate for a bead-spring model. 
+    
+    Args:
+        num_beads : Number of beads. Here, we allow only 2 and 5.
+        T1 : Leftmost temperature
+        T2 : Rightmost temperature
+
+    Returns:
+        Analytic entropy production rate for bead-spring model in steady state.
+    """
+    assert (num_beads == 4) or (num_beads == 5), "'num_beads' must be 2 or 5"
+
+    if num_beads == 4:
+        return k * ((T1 - T2) ** 2) / (4 * e * T1 * T2)
+
+    elif num_beads == 5:
+        return (
+            k
+            * (T1 - T2) ** 2
+            * (111 * T1 ** 2 + 430 * T1 * T2 + 111 * T2 ** 2)
+            / (495 * T1 * T2 * (3 * T1 + T2) * (T1 + 3 * T2) * e)
+        )
 
